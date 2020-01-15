@@ -92,6 +92,17 @@ PDFImage.prototype = {
       pdfFilePath, pageNumber, outputImagePath
     );
   },
+	constructConvertCommandForPageList: function (pageList) {
+    var pdfFilePath = this.pdfFilePath;
+    var outputImagePath = this.getOutputImagePathForFile();
+    var convertOptionsString = this.constructConvertOptions();
+    return util.format(
+      "%s %s\"%s[%s]\" \"%s\"",
+      this.useGM ? "gm convert" : "convert",
+      convertOptionsString ? convertOptionsString + " " : "",
+      pdfFilePath, pageList, outputImagePath
+    );
+  },
   constructCombineCommandForFile: function (imagePaths) {
     return util.format(
       "%s -append %s \"%s\"",
@@ -164,6 +175,71 @@ PDFImage.prototype = {
     var pdfFilePath     = this.pdfFilePath;
     var outputImagePath = this.getOutputImagePathForPage(pageNumber);
     var convertCommand  = this.constructConvertCommandForPage(pageNumber);
+
+    var promise = new Promise(function (resolve, reject) {
+      function convertPageToImage() {
+        exec(convertCommand, function (err, stdout, stderr) {
+          if (err) {
+            return reject({
+              message: "Failed to convert page to image",
+              error: err,
+              stdout: stdout,
+              stderr: stderr
+            });
+          }
+          return resolve(outputImagePath);
+        });
+      }
+
+      fs.stat(outputImagePath, function (err, imageFileStat) {
+        var imageNotExists = err && err.code === "ENOENT";
+        if (!imageNotExists && err) {
+          return reject({
+            message: "Failed to stat image file",
+            error: err
+          });
+        }
+
+        // convert when (1) image doesn't exits or (2) image exists
+        // but its timestamp is older than pdf's one
+
+        if (imageNotExists) {
+          // (1)
+          convertPageToImage();
+          return;
+        }
+
+        // image exist. check timestamp.
+        fs.stat(pdfFilePath, function (err, pdfFileStat) {
+          if (err) {
+            return reject({
+              message: "Failed to stat PDF file",
+              error: err
+            });
+          }
+
+          if (imageFileStat.mtime < pdfFileStat.mtime) {
+            // (2)
+            convertPageToImage();
+            return;
+          }
+
+          return resolve(outputImagePath);
+        });
+      });
+    });
+    return promise;
+  },
+	splitPages: function (pageList) {
+		// Since this library uses imagemagick's convert utility,
+		// The same can be used for a specific use case of splitting a PDF
+		// Into smaller chunks. The assumption is that the output is also a PDF file,
+		// hence use the same output file name as for convertFile() method
+
+		// pageList is a string of form "1,3,7" for disjoint pages or "3-6" for contiguous pages
+    var pdfFilePath     = this.pdfFilePath;
+    var outputImagePath = this.getOutputImagePathForFile();
+    var convertCommand  = this.constructConvertCommandForPageList(pageList);
 
     var promise = new Promise(function (resolve, reject) {
       function convertPageToImage() {
