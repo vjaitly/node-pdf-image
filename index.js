@@ -92,9 +92,10 @@ PDFImage.prototype = {
       pdfFilePath, pageNumber, outputImagePath
     );
   },
-	constructConvertCommandForPageList: function (pageList) {
+	constructConvertCommandForPageList: function (pageList, pageNumber) {
     var pdfFilePath = this.pdfFilePath;
-    var outputImagePath = this.getOutputImagePathForFile();
+		var outputImagePath = (pageNumber) ? this.getOutputImagePathForPage(pageNumber)
+		                        : this.getOutputImagePathForFile();
     var convertOptionsString = this.constructConvertOptions();
     return util.format(
       "%s %s\"%s[%s]\" \"%s\"",
@@ -230,16 +231,18 @@ PDFImage.prototype = {
     });
     return promise;
   },
-	splitPages: function (pageList) {
+	splitPages: function (pageList, pageNumber) {
 		// Since this library uses imagemagick's convert utility,
 		// The same can be used for a specific use case of splitting a PDF
-		// Into smaller chunks. The assumption is that the output is also a PDF file,
+		// Into smaller chunks.
+		// The assumption is that the output is also a PDF file,
 		// hence use the same output file name as for convertFile() method
 
 		// pageList is a string of form "1,3,7" for disjoint pages or "3-6" for contiguous pages
     var pdfFilePath     = this.pdfFilePath;
-    var outputImagePath = this.getOutputImagePathForFile();
-    var convertCommand  = this.constructConvertCommandForPageList(pageList);
+    var outputImagePath = (pageNumber) ? this.getOutputImagePathForPage(pageNumber)
+		                        : this.getOutputImagePathForFile();
+    var convertCommand  = this.constructConvertCommandForPageList(pageList, pageNumber);
 
     var promise = new Promise(function (resolve, reject) {
       function convertPageToImage() {
