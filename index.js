@@ -37,6 +37,76 @@ PDFImage.prototype = {
     });
     return info;
   },
+	parseGetMarkerOutput: function (output) {
+    var allMarkers = [];
+		var margin = 50;
+		var ghostHeight = 10;
+
+		// Output is of the form "h x y". where h is the height and
+		// x,y are coordinates of the connected components.
+		// Ignore any lines whose h is very small, as false positive
+		// Find the minimum y value within a margin of given value
+		// Not using the x value, but adding all the y points to an array
+    output.split("\n").forEach(function (line) {
+       if (line.match(/^(.*) (.*) (.*)$/)) {
+				 // Only consider the entry if it is not a ghost data
+				 if(parseInt(RegExp.$1) > ghostHeight) {
+					 allMarkers.push(parseInt(RegExp.$3));
+				 }
+       }
+    });
+
+		// Sort the marker positions
+		allMarkers.sort((a, b) => a - b);
+
+		let markers = allMarkers.reduce(function (acc, cv) {
+		  if (!acc.some(arrVal => {
+            return (cv <= arrVal + margin);
+          }
+           )) {
+		    acc.push(cv);
+		  }
+		  return acc
+		}, [])
+
+		return markers;
+  },
+	parseGetVerticalPositionOutput: function (output, h) {
+    var info = [];
+		var buffer = 20;
+		var ghostMargin = 50;
+
+		// Find the minimum x value which is common across all the rows
+		// Not using the y value, but adding all the x points to an array
+		// Ignore any marker position in extreme left (i.e < 50px)
+    output.split("\n").forEach(function (line) {
+       if (line.match(/^(.*) (.*)$/)) {
+				  if(parseInt(RegExp.$1) > ghostMargin) {
+						info.push(RegExp.$1);
+					}
+       }
+    });
+		// Find counts for each x point and keep a map
+		let counts = info.reduce(function (acc, cv) {
+			  if (cv in acc) {
+			    acc[cv]++
+			  }
+			  else {
+			    acc[cv] = 1
+			  }
+			  return acc
+			}, {});
+
+			// Assuming the point is available in all the lines
+			// Get the point whose counter is equal to the
+			// TODO:We can add a fuzz logic later
+			let minXPosition =  parseInt (Object.keys(counts).find((i) => {
+		  			return counts[i] == h;
+					})) + buffer || -1;
+
+
+    return minXPosition ;
+  },
   getInfo: function () {
     var self = this;
     var getInfoCommand = this.constructGetInfoCommand();
@@ -231,6 +301,87 @@ PDFImage.prototype = {
     });
     return promise;
   },
+
+	suggestMarkers: function (w,h,x,y) {
+		// Using convert utility to find first vertical line
+		// in the image file. The input is an image file.
+
+		// convert  cam1f.jpg -crop 277x2111+0+0 +repage
+		var opt = `-strip \\( +clone  -threshold 70%  -write mpr:ORG  +delete \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:200x1  -mask mpr:ORG -morphology Dilate rectangle:200x1  +mask  -morphology Dilate Disk:3  \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:1x70 -mask mpr:ORG -morphology Dilate rectangle:1x70  +mask  -morphology Dilate Disk:3  \\) \
+\\( -clone 1 -clone 2 -evaluate-sequence add  \\) \
+-delete 1,2 -compose plus -composite \\( +clone \\) \
+-compose Lighten -composite  -blur 0x0.5 -threshold 70% \
+-define connected-components:verbose=true -define connected-components:area-threshold=100 -connected-components 8 `;
+
+		var self = this;
+
+		var pdfFilePath = self.pdfFilePath;
+		// using null output, to avoid intermediate files
+		var outputImagePath = "null";
+
+    var convertOptionsString = self.constructConvertOptions();
+		var additionalOptions = util.format("-crop %sx%s+%s+%s +repage %s", w, h, x, y, opt);
+    var command = util.format(
+    //  "%s %s\"%s\" \"%s\" \| grep \"#000000\" \| head -n 500 \| awk -F'[,: ]' '{print $1,$2}'",
+      "%s %s \"%s\" %s \"%s\" \| grep \"(0,0,0)\" \| awk -F'[x+,: ]' '{print $6,$7,$8}'",
+      this.useGM ? "gm convert" : "convert",
+      convertOptionsString ? convertOptionsString + " " : "",
+			pdfFilePath,
+			additionalOptions,
+			outputImagePath
+    );
+
+    return new Promise(function (resolve, reject) {
+      exec(command, function (err, stdout, stderr) {
+        if (err) {
+          return reject({
+            message: "Failed to get markers",
+            error: err,
+            stdout: stdout,
+            stderr: stderr
+          });
+        }
+        return resolve(self.parseGetMarkerOutput(stdout));
+      });
+    });
+	},
+	suggestMargin: function (w,h,x,y) {
+		// Using convert utility to find first vertical line
+		// in the image file. The input is an image file.
+		var self = this;
+
+		var pdfFilePath = self.pdfFilePath;
+		// using text output as stdout
+		var outputImagePath = "txt:-";
+
+    var convertOptionsString = self.constructConvertOptions();
+		var additionalOptions = util.format("-crop %sx%s+%s+%s +repage ", w, h, x, y);
+    var command = util.format(
+    //  "%s %s\"%s\" \"%s\" \| grep \"#000000\" \| head -n 500 \| awk -F'[,: ]' '{print $1,$2}'",
+      "%s %s %s\"%s\" \"%s\" \| grep \"#000000\" \| awk -F'[,: ]' '{print $1,$2}'",
+      this.useGM ? "gm convert" : "convert",
+      convertOptionsString ? convertOptionsString + " " : "",
+			additionalOptions,
+      pdfFilePath, outputImagePath
+    );
+
+    return new Promise(function (resolve, reject) {
+      exec(command, function (err, stdout, stderr) {
+        if (err) {
+          return reject({
+            message: "Failed to run command",
+            error: err,
+            stdout: stdout,
+            stderr: stderr
+          });
+        }
+        return resolve(self.parseGetVerticalPositionOutput(stdout,h));
+      });
+    });
+	},
+
 	splitPages: function (pageList, pageNumber) {
 		// Since this library uses imagemagick's convert utility,
 		// The same can be used for a specific use case of splitting a PDF
