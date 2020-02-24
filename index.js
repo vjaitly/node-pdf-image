@@ -17,6 +17,7 @@ function PDFImage(pdfFilePath, options) {
   this.setConvertExtension(options.convertExtension);
   this.useGM = options.graphicsMagick || false;
   this.combinedImage = options.combinedImage || false;
+	this.gutter = options.gutter || 50;
 
   this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
 }
@@ -39,7 +40,7 @@ PDFImage.prototype = {
   },
 	parseGetMarkerOutput: function (output) {
     var allMarkers = [];
-		var margin = 50;
+		var margin = this.gutter;
 		var ghostHeight = 10;
 
 		// Output is of the form "h x y". where h is the height and
