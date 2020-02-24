@@ -18,6 +18,7 @@ function PDFImage(pdfFilePath, options) {
   this.useGM = options.graphicsMagick || false;
   this.combinedImage = options.combinedImage || false;
 	this.gutter = options.gutter || 50;
+	this.ghostMargin = options.ghostMargin || 50;
 
   this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
 }
@@ -75,7 +76,7 @@ PDFImage.prototype = {
 	parseGetVerticalPositionOutput: function (output, h) {
     var info = [];
 		var buffer = 20;
-		var ghostMargin = 50;
+		var ghostMargin = this.ghostMargin;
 
 		// Find the minimum x value which is common across all the rows
 		// Not using the y value, but adding all the x points to an array
@@ -323,7 +324,7 @@ PDFImage.prototype = {
 		var outputImagePath = "null";
 
     var convertOptionsString = self.constructConvertOptions();
-		var additionalOptions = util.format("-crop %sx%s+%s+%s +repage %s", w, h, x, y, opt);
+		var additionalOptions = util.format("-crop %sx%s+%s+%s +repage %s", w - this.ghostMargin, h, x + this.ghostMargin, y, opt);
     var command = util.format(
     //  "%s %s\"%s\" \"%s\" \| grep \"#000000\" \| head -n 500 \| awk -F'[,: ]' '{print $1,$2}'",
       "%s %s \"%s\" %s \"%s\" \| grep \"(0,0,0)\" \| awk -F'[x+,: ]' '{print $6,$7,$8}'",
