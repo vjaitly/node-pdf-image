@@ -313,7 +313,7 @@ PDFImage.prototype = {
 \\( -clone 1 -clone 2 -evaluate-sequence add  \\) \
 -delete 1,2 -compose plus -composite \\( +clone \\) \
 -compose Lighten -composite  -blur 0x0.5 -threshold 70% \
--define connected-components:verbose=true -define connected-components:area-threshold=100 -connected-components 8 `;
+-define connected-components:verbose=true -define connected-components:area-threshold=80 -connected-components 8 `;
 
 		var self = this;
 
