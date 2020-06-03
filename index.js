@@ -19,6 +19,7 @@ function PDFImage(pdfFilePath, options) {
   this.combinedImage = options.combinedImage || false;
 	this.gutter = options.gutter || 50;
 	this.ghostMargin = options.ghostMargin || 50;
+	this.fuzzMargin = options.fuzzMargin || 1;
 
   this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
 }
@@ -77,6 +78,8 @@ PDFImage.prototype = {
     var info = [];
 		var buffer = 20;
 		var ghostMargin = this.ghostMargin;
+		// Fuzz logic is to take a specific percentage to match instead of all lines
+		var fuzz = this.fuzzMargin;
 
 		// Find the minimum x value which is common across all the rows
 		// Not using the y value, but adding all the x points to an array
@@ -103,7 +106,7 @@ PDFImage.prototype = {
 			// Get the point whose counter is equal to the
 			// TODO:We can add a fuzz logic later
 			let minXPosition =  parseInt (Object.keys(counts).find((i) => {
-		  			return counts[i] == h;
+		  			return counts[i] >= (h * fuzz);
 					})) + buffer || -1;
 
 
