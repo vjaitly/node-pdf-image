@@ -20,6 +20,7 @@ function PDFImage(pdfFilePath, options) {
 	this.gutter = options.gutter || 50;
 	this.ghostMargin = options.ghostMargin || 50;
 	this.fuzzMargin = options.fuzzMargin || 1;
+	this.overrideMargin = options.manual || 0;
 
   this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
 }
@@ -74,12 +75,13 @@ PDFImage.prototype = {
 
 		return markers;
   },
-	parseGetVerticalPositionOutput: function (output, h) {
+	parseGetVerticalPositionOutput: function (output, h, w) {
     var info = [];
 		var buffer = 20;
 		var ghostMargin = this.ghostMargin;
 		// Fuzz logic is to take a specific percentage to match instead of all lines
 		var fuzz = this.fuzzMargin;
+		var overrideMargin = this.overrideMargin ? (w * this.overrideMargin) : -1;
 
 		// Find the minimum x value which is common across all the rows
 		// Not using the y value, but adding all the x points to an array
@@ -107,7 +109,7 @@ PDFImage.prototype = {
 			// TODO:We can add a fuzz logic later
 			let minXPosition =  parseInt (Object.keys(counts).find((i) => {
 		  			return counts[i] >= (h * fuzz);
-					})) + buffer || -1;
+					})) + buffer || overrideMargin;
 
 
     return minXPosition ;
@@ -307,18 +309,44 @@ PDFImage.prototype = {
     return promise;
   },
 
+	combineImagesToPDF: function(imagePaths) {
+    var pdfImage = this;
+		var convertOptionsString = this.constructConvertOptions();
+    var combineCommand = util.format(
+      "%s %s %s \"%s\"",
+      this.useGM ? "gm convert" : "convert",
+      imagePaths.join(' '),
+			convertOptionsString ? convertOptionsString + " " : "",
+      this.getOutputImagePathForFile()
+    );
+	  return new Promise(function (resolve, reject) {
+      exec(combineCommand, function (err, stdout, stderr) {
+        if (err) {
+          return reject({
+            message: "Failed to combine images",
+            error: err,
+            stdout: stdout,
+            stderr: stderr
+          });
+        }
+        //exec("rm "+imagePaths.join(' ')); //cleanUp
+        return resolve(pdfImage.getOutputImagePathForFile());
+      });
+    });
+  },
+
 	suggestMarkers: function (w,h,x,y) {
 		// Using convert utility to find first vertical line
 		// in the image file. The input is an image file.
 
 		// convert  cam1f.jpg -crop 277x2111+0+0 +repage
-		var opt = `-strip \\( +clone  -threshold 70%  -write mpr:ORG  +delete \\) \
+		var opt = `-strip \\( +clone  -threshold 75%  -write mpr:ORG  +delete \\) \
 \\( mpr:ORG  -negate  -morphology Erode rectangle:200x1  -mask mpr:ORG -morphology Dilate rectangle:200x1  +mask  -morphology Dilate Disk:3  \\) \
 \\( mpr:ORG  -negate  -morphology Erode rectangle:1x70 -mask mpr:ORG -morphology Dilate rectangle:1x70  +mask  -morphology Dilate Disk:3  \\) \
 \\( -clone 1 -clone 2 -evaluate-sequence add  \\) \
 -delete 1,2 -compose plus -composite \\( +clone \\) \
 -compose Lighten -composite  -blur 0x0.5 -threshold 70% \
--define connected-components:verbose=true -define connected-components:area-threshold=80 -connected-components 8 `;
+-define connected-components:verbose=true -define connected-components:area-threshold=40 -connected-components 8 `;
 
 		var self = this;
 
@@ -382,7 +410,7 @@ PDFImage.prototype = {
             stderr: stderr
           });
         }
-        return resolve(self.parseGetVerticalPositionOutput(stdout,h));
+        return resolve(self.parseGetVerticalPositionOutput(stdout,h,w));
       });
     });
 	},
