@@ -21,6 +21,7 @@ function PDFImage(pdfFilePath, options) {
 	this.ghostMargin = options.ghostMargin || 50;
 	this.fuzzMargin = options.fuzzMargin || 1;
 	this.overrideMargin = options.manual || 0;
+	this.debug = options.debug || false;
 
   this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
 }
@@ -335,20 +336,33 @@ PDFImage.prototype = {
     });
   },
 
-	suggestMarkers: function (w,h,x,y) {
+	suggestMarkers: function (w,h,x,y,mask) {
 		// Using convert utility to find first vertical line
 		// in the image file. The input is an image file.
-
+		var self = this;
+		var mask = mask || 17;
+		const fileBaseName = path.basename(self.pdfFilePath, '.jpg');
 		// convert  cam1f.jpg -crop 277x2111+0+0 +repage
-		var opt = `-strip \\( +clone  -threshold 75%  -write mpr:ORG  +delete \\) \
-\\( mpr:ORG  -negate  -morphology Erode rectangle:200x1  -mask mpr:ORG -morphology Dilate rectangle:200x1  +mask  -morphology Dilate Disk:3  \\) \
-\\( mpr:ORG  -negate  -morphology Erode rectangle:1x70 -mask mpr:ORG -morphology Dilate rectangle:1x70  +mask  -morphology Dilate Disk:3  \\) \
+		if(self.debug) {
+		var opt = `-strip \\( +clone  -threshold 75% -write mpr:ORG  +delete -write ${fileBaseName}-1.png \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:${mask}x1  -write ${fileBaseName}-2.png -mask mpr:ORG -morphology Dilate rectangle:${mask}x1 -write ${fileBaseName}-3.png +mask  -morphology Dilate Disk:3 -write ${fileBaseName}-4.png \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:1x${mask}  -write ${fileBaseName}-5.png -mask mpr:ORG -morphology Dilate rectangle:1x${mask}  -write ${fileBaseName}-6.png +mask  -morphology Dilate Disk:3 -write ${fileBaseName}-7.png \\) \
+\\( -clone 1 -clone 2 -evaluate-sequence add -write ${fileBaseName}-8.png \\) \
+-delete 1,2 -compose plus -composite \\( +clone -write ${fileBaseName}-9.png \\) \
+-compose Lighten -composite  -blur 0x0.5 -threshold 70% -write ${fileBaseName}-10.png \
+-define connected-components:verbose=true -define connected-components:area-threshold=40 -connected-components 8 `;
+} else {
+	var opt = `-strip \\( +clone  -threshold 75% -write mpr:ORG  +delete \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:${mask}x1   -mask mpr:ORG -morphology Dilate rectangle:${mask}x1  +mask  -morphology Dilate Disk:3  \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:1x${mask}   -mask mpr:ORG -morphology Dilate rectangle:1x${mask}  +mask  -morphology Dilate Disk:3  \\) \
 \\( -clone 1 -clone 2 -evaluate-sequence add  \\) \
--delete 1,2 -compose plus -composite \\( +clone \\) \
--compose Lighten -composite  -blur 0x0.5 -threshold 70% \
+-delete 1,2 -compose plus -composite \\( +clone  \\) \
+-compose Lighten -composite  -blur 0x0.5 -threshold 70%  \
 -define connected-components:verbose=true -define connected-components:area-threshold=40 -connected-components 8 `;
 
-		var self = this;
+}
+
+
 
 		var pdfFilePath = self.pdfFilePath;
 		// using null output, to avoid intermediate files
@@ -366,6 +380,64 @@ PDFImage.prototype = {
 			outputImagePath
     );
 
+// console.log(command);
+    return new Promise(function (resolve, reject) {
+      exec(command, function (err, stdout, stderr) {
+        if (err) {
+          return reject({
+            message: "Failed to get markers",
+            error: err,
+            stdout: stdout,
+            stderr: stderr
+          });
+        }
+        return resolve(self.parseGetMarkerOutput(stdout));
+      });
+    });
+	},
+	suggestMarkers1: function (w,h,x,y) {
+		// Using convert utility to find first vertical line
+		// in the image file. The input is an image file.
+
+		var self = this;
+		const fileBaseName = path.basename(self.pdfFilePath, '.jpg');
+		// convert  cam1f.jpg -crop 277x2111+0+0 +repage
+		if(self.debug) {
+		var opt = `-strip \\( +clone  -threshold 75%  -write ${fileBaseName}-o1.png -write mpr:ORG  +delete -write ${fileBaseName}-o2.png \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:200x1  -write ${fileBaseName}-o3.png -mask mpr:ORG -morphology Dilate rectangle:200x1 -write ${fileBaseName}-o4.png +mask  -morphology Dilate Disk:3 -write ${fileBaseName}-o5.png \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:1x70   -write ${fileBaseName}-o6.png -mask mpr:ORG -morphology Dilate rectangle:1x70  -write ${fileBaseName}-o7.png +mask  -morphology Dilate Disk:3 -write ${fileBaseName}-o8.png \\) \
+\\( -clone 1 -clone 2 -evaluate-sequence add -write ${fileBaseName}-o9.png \\) \
+-delete 1,2 -compose plus -composite \\( +clone -write ${fileBaseName}-o10.png \\) \
+-compose Lighten -composite  -blur 0x0.5 -threshold 70% -write ${fileBaseName}-o11.png \
+-define connected-components:verbose=true -define connected-components:area-threshold=40 -connected-components 8 `;
+} else {
+	var opt = `-strip \\( +clone  -threshold 75%  -write mpr:ORG  +delete  \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:200x1  -mask mpr:ORG -morphology Dilate rectangle:200x1  +mask  -morphology Dilate Disk:3  \\) \
+\\( mpr:ORG  -negate  -morphology Erode rectangle:1x70   -mask mpr:ORG -morphology Dilate rectangle:1x70   +mask  -morphology Dilate Disk:3  \\) \
+\\( -clone 1 -clone 2 -evaluate-sequence add  \\) \
+-delete 1,2 -compose plus -composite \\( +clone  \\) \
+-compose Lighten -composite  -blur 0x0.5 -threshold 70%  \
+-define connected-components:verbose=true -define connected-components:area-threshold=40 -connected-components 8 `;
+
+}
+
+		var pdfFilePath = self.pdfFilePath;
+		// using null output, to avoid intermediate files
+		var outputImagePath = "null";
+
+    var convertOptionsString = self.constructConvertOptions();
+		var additionalOptions = util.format("-crop %sx%s+%s+%s +repage %s", w - this.ghostMargin, h, x + this.ghostMargin, y, opt);
+    var command = util.format(
+    //  "%s %s\"%s\" \"%s\" \| grep \"#000000\" \| head -n 500 \| awk -F'[,: ]' '{print $1,$2}'",
+      "%s %s \"%s\" %s \"%s\" \| grep \"(0,0,0)\" \| awk -F'[x+,: ]' '{print $6,$7,$8}'",
+      this.useGM ? "gm convert" : "convert",
+      convertOptionsString ? convertOptionsString + " " : "",
+			pdfFilePath,
+			additionalOptions,
+			outputImagePath
+    );
+
+// console.log(command);
     return new Promise(function (resolve, reject) {
       exec(command, function (err, stdout, stderr) {
         if (err) {
