@@ -236,7 +236,6 @@ PDFImage.prototype = {
             return pdfImage
               .convertPage(page)
               .then(function (imagePath) {
-                console.log(imagePath);
                 imagePaths.push(imagePath);
               })
               .catch(function (error) {
